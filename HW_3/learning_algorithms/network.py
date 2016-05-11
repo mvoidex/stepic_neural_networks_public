@@ -12,7 +12,7 @@ import random
 import numpy as np
 
 
-#### Вспомогательные функции
+# Вспомогательные функции
 def sigmoid(z):
     """
     Сигмоида
@@ -68,7 +68,7 @@ class Network(object):
         return output
 
     def SGD(self, training_data, epochs, mini_batch_size, eta,
-            test_data=None):
+            test_data=None, l1 = 0.0, l2 = 0.0):
         """
         Обучить нейронную сеть, используя алгоритм стохастического
         (mini-batch) градиентного спуска.
@@ -85,7 +85,8 @@ class Network(object):
         но может существенно замедлить работу программы.
         """
 
-        if test_data is not None: n_test = len(test_data)
+        if test_data is not None:
+            n_test = len(test_data)
         n = len(training_data)
         success_tests = 0
         for j in range(epochs):
@@ -94,7 +95,7 @@ class Network(object):
                 training_data[k:k + mini_batch_size]
                 for k in range(0, n, mini_batch_size)]
             for mini_batch in mini_batches:
-                self.update_mini_batch(mini_batch, eta)
+                self.update_mini_batch(mini_batch, eta, l1, l2)
             if test_data is not None:
                 success_tests = self.evaluate(test_data)
                 print("Эпоха {0}: {1} / {2}".format(
@@ -104,7 +105,7 @@ class Network(object):
         if test_data is not None:
             return success_tests / n_test
 
-    def update_mini_batch(self, mini_batch, eta):
+    def update_mini_batch(self, mini_batch, eta, l1, l2):
         """
         Обновить веса и смещения нейронной сети, сделав шаг градиентного
         спуска на основе алгоритма обратного распространения ошибки, примененного
@@ -121,8 +122,8 @@ class Network(object):
             nabla_w = [nw + dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
 
         eps = eta / len(mini_batch)
-        self.weights = [w - eps * nw for w, nw in zip(self.weights, nabla_w)]
-        self.biases = [b - eps * nb for b, nb in zip(self.biases, nabla_b)]
+        self.weights = [w - eps * (nw + l1 * np.sign(w) + l2 * w) for w, nw in zip(self.weights, nabla_w)]
+        self.biases = [b - eps * (nb + l1 * np.sign(b) + l2 * b) for b, nb in zip(self.biases, nabla_b)]
 
     def backprop(self, x, y):
         """
