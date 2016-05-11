@@ -26,13 +26,14 @@ class World(metaclass=ABCMeta):
 
 
 class SimpleCarWorld(World):
-    COLLISION_PENALTY =  # выберите сами
-    HEADING_REWARD =  # выберите сами
-    WRONG_HEADING_PENALTY =  # выберите сами
-    IDLENESS_PENALTY =  # выберите сами
-    SPEEDING_PENALTY =  # выберите сами
-    MIN_SPEED =  # выберите сами
-    MAX_SPEED =  # выберите сами
+    # Нижележащие константы настройте сами
+    COLLISION_PENALTY = 64 * 1e0
+    HEADING_REWARD = 0 * 1e-1
+    WRONG_HEADING_PENALTY = 0 * 1e0
+    IDLENESS_PENALTY = 32 * 1e-1
+    SPEEDING_PENALTY = 32 * 1e-1
+    MIN_SPEED = 0.1 * 1e0
+    MAX_SPEED = 0.7 * 1e0
 
     size = (800, 600)
 
@@ -104,7 +105,7 @@ class SimpleCarWorld(World):
         :param collision: произошло ли столкновение со стеной на прошлом шаге
         :return reward: награду агента (возможно, отрицательную)
         """
-        a = np.sin(angle(-state.position, state.heading))
+        a = -np.sin(angle(-state.position, state.heading))
         heading_reward = 1 if a > 0.1 else a if a > 0 else 0
         heading_penalty = a if a <= 0 else 0
         idle_penalty = 0 if abs(state.velocity) > self.MIN_SPEED else -self.IDLENESS_PENALTY
@@ -112,7 +113,22 @@ class SimpleCarWorld(World):
         collision_penalty = - max(abs(state.velocity), 0.1) * int(collision) * self.COLLISION_PENALTY
 
         return heading_reward * self.HEADING_REWARD + heading_penalty * self.WRONG_HEADING_PENALTY + collision_penalty \
-               + idle_penalty + speeding_penalty
+            + idle_penalty + speeding_penalty
+
+    def eval_reward(self, state, collision):
+        """
+        Награда "по умолчанию", используется в режиме evaluate
+        Удобно, чтобы не приходилось отменять свои изменения в функции reward для оценки результата
+        """
+        a = -np.sin(angle(-state.position, state.heading))
+        heading_reward = 1 if a > 0.1 else a if a > 0 else 0
+        heading_penalty = a if a <= 0 else 0
+        idle_penalty = 0 if abs(state.velocity) > self.MIN_SPEED else -self.IDLENESS_PENALTY
+        speeding_penalty = 0 if abs(state.velocity) < self.MAX_SPEED else -self.SPEEDING_PENALTY * abs(state.velocity)
+        collision_penalty = - max(abs(state.velocity), 0.1) * int(collision) * self.COLLISION_PENALTY
+
+        return heading_reward * self.HEADING_REWARD + heading_penalty * self.WRONG_HEADING_PENALTY + collision_penalty \
+            + idle_penalty + speeding_penalty
 
     def run(self, steps=None):
         """
@@ -120,7 +136,9 @@ class SimpleCarWorld(World):
         :param steps: количество шагов цикла; до внешней остановки, если None
         """
         scale = self._prepare_visualization()
-        for _ in range(steps) if steps is not None else itertools.count():
+        self.steps = steps
+        for step in range(steps) if steps is not None else itertools.count():
+            self.step = step
             self.transition()
             self.visualize(scale)
             if self._update_display() == pygame.QUIT:
@@ -137,7 +155,7 @@ class SimpleCarWorld(World):
 
     def evaluate_agent(self, agent, steps=1000, visual=True):
         """
-        Прогонка цикла мира для конкретного агента (см. пример использования в комментариях после if _name__ == "__main__")
+        Прогонка цикла мира для конкретного агента (см. пример использования в комментариях после if __name__ == "__main__")
         :param agent: SimpleCarAgent
         :param steps: количество итераций цикла
         :param visual: рисовать картинку или нет
@@ -148,7 +166,9 @@ class SimpleCarWorld(World):
         rewards = []
         if visual:
             scale = self._prepare_visualization()
-        for _ in range(steps):
+        self.steps = steps
+        for step in range(steps):
+            self.step = step
             vision = self.vision_for(agent)
             action = agent.choose_action(vision)
             next_agent_state, collision = self.physics.move(
@@ -156,7 +176,7 @@ class SimpleCarWorld(World):
             )
             self.circles[agent] += angle(self.agent_states[agent].position, next_agent_state.position) / (2*pi)
             self.agent_states[agent] = next_agent_state
-            rewards.append(self.reward(next_agent_state, collision))
+            rewards.append(self.eval_reward(next_agent_state, collision))
             agent.receive_feedback(rewards[-1])
             if visual:
                 self.visualize(scale)
@@ -220,6 +240,9 @@ class SimpleCarWorld(World):
 
         if len(self.agents) == 1:
             a = self.agents[0]
+            if self.steps is not None and self.step is not None:
+                draw_text("Step: {} / {}".format(self.step, self.steps), self._info_surface, scale, self.size,
+                          text_color=white, bg_color=black, tlpoint=(self._info_surface.get_width() - 200, self._info_surface.get_height() - 30))
             draw_text("Reward: %.3f" % a.reward_history[-1], self._info_surface, scale, self.size,
                       text_color=white, bg_color=black)
             steer, acc = a.chosen_actions_history[-1]
